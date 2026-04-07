@@ -8,8 +8,6 @@ import os
 from urllib import error, parse, request
 from typing import Optional
 
-from openai import OpenAI
-
 # --- Config (read from env vars) ---
 API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
 API_KEY = os.getenv("HF_TOKEN") or os.getenv("API_KEY") or os.getenv("OPENAI_API_KEY")
@@ -39,12 +37,6 @@ def require_env(name: str, value: Optional[str]) -> str:
     if value:
         return value
     raise RuntimeError(f"Missing required environment variable: {name}")
-
-
-client = OpenAI(
-    api_key=require_env("HF_TOKEN", API_KEY),
-    base_url=API_BASE_URL,
-)
 
 
 # --- Mandatory log functions ---
@@ -129,6 +121,38 @@ def http_json(method: str, url: str, payload: Optional[dict] = None, timeout: in
     return json.loads(body)
 
 
+def complete_chat(messages: list[dict], timeout: int = 60) -> str:
+    api_key = require_env("HF_TOKEN", API_KEY)
+    payload = {
+        "model": MODEL_NAME,
+        "messages": messages,
+        "max_tokens": 150,
+        "temperature": 0.2,
+    }
+    data = json.dumps(payload).encode("utf-8")
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key}",
+    }
+    req = request.Request(
+        f"{API_BASE_URL.rstrip('/')}/chat/completions",
+        data=data,
+        headers=headers,
+        method="POST",
+    )
+    try:
+        with request.urlopen(req, timeout=timeout) as resp:
+            body = resp.read().decode("utf-8")
+    except error.HTTPError as exc:
+        details = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"LLM API HTTP {exc.code}: {details}") from exc
+    except error.URLError as exc:
+        raise RuntimeError(f"Failed to reach LLM API: {exc.reason}") from exc
+
+    response = json.loads(body)
+    return response["choices"][0]["message"]["content"].strip()
+
+
 def run_task(task_id: str) -> float:
     log_start(task_id, BENCHMARK, MODEL_NAME)
     env_url = require_env("ENV_URL", ENV_URL)
@@ -149,13 +173,7 @@ What is your next action?"""
 
             messages.append({"role": "user", "content": user_msg})
 
-            response = client.chat.completions.create(
-                model=MODEL_NAME,
-                messages=messages,
-                max_tokens=150,
-                temperature=0.2,
-            )
-            action_str = response.choices[0].message.content.strip()
+            action_str = complete_chat(messages)
             messages.append({"role": "assistant", "content": action_str})
 
             error_msg = None
