@@ -1,0 +1,15 @@
+.git
+.gitignore
+.venv
+.env
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.sixth/
+uv.lock
+README.md
+inference.py
