@@ -5,9 +5,9 @@ Follows mandatory stdout format: [START], [STEP], [END]
 
 import json
 import os
+from urllib import error, parse, request
 from typing import Optional
 
-import requests
 from openai import OpenAI
 
 # --- Config (read from env vars) ---
@@ -109,13 +109,31 @@ def choose_fallback_action(obs: dict) -> dict:
     return best_action or {"action_type": "rest"}
 
 
+def http_json(method: str, url: str, payload: Optional[dict] = None, timeout: int = 30) -> dict:
+    data = None
+    headers = {}
+    if payload is not None:
+        data = json.dumps(payload).encode("utf-8")
+        headers["Content-Type"] = "application/json"
+
+    req = request.Request(url, data=data, headers=headers, method=method)
+    try:
+        with request.urlopen(req, timeout=timeout) as resp:
+            body = resp.read().decode("utf-8")
+    except error.HTTPError as exc:
+        details = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"HTTP {exc.code} for {url}: {details}") from exc
+    except error.URLError as exc:
+        raise RuntimeError(f"Failed to reach {url}: {exc.reason}") from exc
+
+    return json.loads(body)
+
+
 def run_task(task_id: str) -> float:
     log_start(task_id, BENCHMARK, MODEL_NAME)
     env_url = require_env("ENV_URL", ENV_URL)
-
-    resp = requests.post(f"{env_url}/reset?task_id={task_id}", timeout=30)
-    resp.raise_for_status()
-    obs = resp.json()
+    reset_url = f"{env_url}/reset?{parse.urlencode({'task_id': task_id})}"
+    obs = http_json("POST", reset_url)
 
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
     rewards = []
@@ -147,13 +165,8 @@ What is your next action?"""
                 action = choose_fallback_action(obs)
                 error_msg = "invalid_json"
 
-            step_resp = requests.post(
-                f"{env_url}/step?task_id={task_id}",
-                json=action,
-                timeout=30,
-            )
-            step_resp.raise_for_status()
-            result = step_resp.json()
+            step_url = f"{env_url}/step?{parse.urlencode({'task_id': task_id})}"
+            result = http_json("POST", step_url, payload=action)
             obs = result["observation"]
             reward = result["reward"]
             done = result["done"]
@@ -164,9 +177,8 @@ What is your next action?"""
             if done:
                 break
 
-        state_resp = requests.get(f"{env_url}/state?task_id={task_id}", timeout=30)
-        state_resp.raise_for_status()
-        final_state = state_resp.json()
+        state_url = f"{env_url}/state?{parse.urlencode({'task_id': task_id})}"
+        final_state = http_json("GET", state_url)
         total = final_state.get("total_reward", sum(rewards))
         success = total >= 0.5
 
