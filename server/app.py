@@ -4,6 +4,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
+import uvicorn
 from models import SeedBankAction
 from environment.env import SeedBankEnv
 
@@ -54,3 +55,12 @@ def state(task_id: str = "easy"):
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+def main():
+    port = int(os.getenv("PORT", "7860"))
+    uvicorn.run("server.app:app", host="0.0.0.0", port=port)
+
+
+if __name__ == "__main__":
+    main()
