@@ -1,4 +1,4 @@
-FROM python:3.10-slim
+FROM python:3.10-slim@sha256:4ba18b066cee17f2696cf9a2ba564d7d5eb05a91d6a949326780aa7c6912160d
 
 RUN useradd -m -u 1000 user
 USER user
