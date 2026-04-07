@@ -19,13 +19,10 @@ BENCHMARK = "seed_bank_env"
 
 SYSTEM_PROMPT = """You are an expert seed bank manager during a climate crisis.
 Distribute seeds to villages and crossbreed varieties to maximize crop yields.
-
 Respond with valid JSON only. Available actions:
-
 1. {"action_type": "distribute", "seed_id": "<id>", "village_id": "<id>"}
 2. {"action_type": "crossbreed", "seed_a": "<id>", "seed_b": "<id>"}
 3. {"action_type": "rest"}
-
 Strategy:
 - High drought_level village -> use high drought_resist seed
 - High pest_level village -> use high pest_resist seed
