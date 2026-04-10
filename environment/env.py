@@ -120,7 +120,7 @@ class SeedBankEnv:
 
         return self._get_observation(message), reward, self.done, {
             "step": self.step_count,
-            "total_reward": self.total_reward
+            "total_reward": self._bounded_score(self.total_reward)
         }
 
     def state(self) -> SeedBankState:
@@ -128,7 +128,7 @@ class SeedBankEnv:
             task_id=self.task_id,
             season=self.season,
             step_count=self.step_count,
-            total_reward=round(self.total_reward, 3),
+            total_reward=self._bounded_score(self.total_reward),
             done=self.done,
             villages=self.villages,
             available_seeds=self.available_seeds
@@ -149,3 +149,7 @@ class SeedBankEnv:
             task_id=self.task_id,
             message=message
         )
+
+    @staticmethod
+    def _bounded_score(value: float) -> float:
+        return round(min(0.999, max(0.001, value)), 3)
