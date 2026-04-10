@@ -118,10 +118,13 @@ def crossbreed(seed_a: str, seed_b: str) -> Dict:
 
 
 def grade_task(task_id: str, village_yields: Dict[str, float]) -> float:
-    """Score 0.0-1.0 based on how many villages hit target yield."""
+    """Score strictly inside (0, 1) based on villages hitting target yield."""
     target = TASKS[task_id]["target_yield"]
     total  = len(village_yields)
     if total == 0:
-        return 0.0
+        return 0.001
     passed = sum(1 for y in village_yields.values() if y >= target)
-    return round(passed / total, 3)
+    raw_score = passed / total
+    # Hackathon validator requires strict bounds, not inclusive endpoints.
+    bounded = min(0.999, max(0.001, raw_score))
+    return round(bounded, 3)
