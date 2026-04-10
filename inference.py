@@ -7,7 +7,6 @@ import json
 import os
 from urllib import error, parse, request
 from typing import Optional
-from openai import OpenAI
 
 # --- Config (read from env vars) ---
 API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
@@ -19,25 +18,16 @@ BENCHMARK = "seed_bank_env"
 
 SYSTEM_PROMPT = """You are an expert seed bank manager during a climate crisis.
 Distribute seeds to villages and crossbreed varieties to maximize crop yields.
-
 Respond with valid JSON only. Available actions:
-
 1. {"action_type": "distribute", "seed_id": "<id>", "village_id": "<id>"}
 2. {"action_type": "crossbreed", "seed_a": "<id>", "seed_b": "<id>"}
 3. {"action_type": "rest"}
-
 Strategy:
 - High drought_level village -> use high drought_resist seed
 - High pest_level village -> use high pest_resist seed
 - No good seed available -> crossbreed first
 - Respond ONLY with JSON, no explanation.
 """
-
-# Initialize OpenAI client
-client = OpenAI(
-    base_url=API_BASE_URL,
-    api_key=API_KEY
-)
 
 def require_env(name: str, value: Optional[str]) -> str:
     if value:
@@ -127,19 +117,36 @@ def http_json(method: str, url: str, payload: Optional[dict] = None, timeout: in
     return json.loads(body)
 
 
-def complete_chat(messages: list[dict]) -> str:
+def complete_chat(messages: list[dict], timeout: int = 60) -> str:
     api_key = require_env("HF_TOKEN", API_KEY)
-    
+    payload = {
+        "model": MODEL_NAME,
+        "messages": messages,
+        "max_tokens": 150,
+        "temperature": 0.2,
+    }
+    data = json.dumps(payload).encode("utf-8")
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key}",
+    }
+    req = request.Request(
+        f"{API_BASE_URL.rstrip('/')}/chat/completions",
+        data=data,
+        headers=headers,
+        method="POST",
+    )
     try:
-        response = client.chat.completions.create(
-            model=MODEL_NAME,
-            messages=messages,
-            max_tokens=150,
-            temperature=0.2,
-        )
-        return response.choices[0].message.content.strip()
-    except Exception as exc:
-        raise RuntimeError(f"OpenAI API call failed: {str(exc)}") from exc
+        with request.urlopen(req, timeout=timeout) as resp:
+            body = resp.read().decode("utf-8")
+    except error.HTTPError as exc:
+        details = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"LLM API HTTP {exc.code}: {details}") from exc
+    except error.URLError as exc:
+        raise RuntimeError(f"Failed to reach LLM API: {exc.reason}") from exc
+
+    response = json.loads(body)
+    return response["choices"][0]["message"]["content"].strip()
 
 
 def run_task(task_id: str) -> float:
