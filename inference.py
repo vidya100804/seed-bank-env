@@ -35,6 +35,49 @@ def require_env(name: str, value: Optional[str]) -> str:
     raise RuntimeError(f"Missing required environment variable: {name}")
 
 
+def can_reach_env(base_url: str, timeout: int = 5) -> bool:
+    base = base_url.rstrip("/")
+    for path in ["/health", "/"]:
+        req = request.Request(f"{base}{path}", method="GET")
+        try:
+            with request.urlopen(req, timeout=timeout) as resp:
+                if 200 <= resp.status < 400:
+                    return True
+        except Exception:
+            continue
+    return False
+
+
+def resolve_env_url() -> str:
+    candidates = [
+        os.getenv("ENV_URL"),
+        os.getenv("OPENENV_URL"),
+        os.getenv("OPENENV_ENV_URL"),
+        os.getenv("ENV_ENDPOINT"),
+        os.getenv("SPACE_URL"),
+        "http://127.0.0.1:7860",
+        "http://localhost:7860",
+        "http://127.0.0.1:8000",
+        "http://localhost:8000",
+    ]
+    seen = set()
+    unique = []
+    for candidate in candidates:
+        if candidate and candidate not in seen:
+            seen.add(candidate)
+            unique.append(candidate)
+
+    for candidate in unique:
+        if can_reach_env(candidate):
+            return candidate.rstrip("/")
+
+    tried = ", ".join(unique) if unique else "none"
+    raise RuntimeError(
+        "Could not reach environment server. "
+        f"Tried: {tried}. Set ENV_URL explicitly if needed."
+    )
+
+
 # --- Mandatory log functions ---
 def log_start(task: str, env: str, model: str) -> None:
     print(f"[START] task={task} env={env} model={model}", flush=True)
@@ -149,9 +192,8 @@ def complete_chat(messages: list[dict], timeout: int = 60) -> str:
     return response["choices"][0]["message"]["content"].strip()
 
 
-def run_task(task_id: str) -> float:
+def run_task(task_id: str, env_url: str) -> float:
     log_start(task_id, BENCHMARK, MODEL_NAME)
-    env_url = require_env("ENV_URL", ENV_URL)
     reset_url = f"{env_url}/reset?{parse.urlencode({'task_id': task_id})}"
     obs = http_json("POST", reset_url)
 
@@ -211,9 +253,10 @@ What is your next action?"""
 
 
 def main():
+    env_url = resolve_env_url()
     scores = {}
     for task_id in ["easy", "medium", "hard"]:
-        scores[task_id] = run_task(task_id)
+        scores[task_id] = run_task(task_id, env_url)
 
     print("\n=== FINAL SCORES ===", flush=True)
     for task_id, score in scores.items():
