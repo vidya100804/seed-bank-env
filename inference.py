@@ -35,6 +35,10 @@ def require_env(name: str, value: Optional[str]) -> str:
     raise RuntimeError(f"Missing required environment variable: {name}")
 
 
+def bounded_score(value: float) -> float:
+    return round(min(0.999, max(0.001, value)), 3)
+
+
 def can_reach_env(base_url: str, timeout: int = 5) -> bool:
     base = base_url.rstrip("/")
     for path in ["/health", "/"]:
@@ -241,7 +245,8 @@ What is your next action?"""
 
         state_url = f"{env_url}/state?{parse.urlencode({'task_id': task_id})}"
         final_state = http_json("GET", state_url)
-        total = final_state.get("total_reward", sum(rewards))
+        total = float(final_state.get("total_reward", sum(rewards)))
+        total = bounded_score(total)
         success = total >= 0.5
 
     except Exception:
@@ -249,7 +254,7 @@ What is your next action?"""
         raise
 
     log_end(success, step, rewards)
-    return sum(rewards)
+    return total
 
 
 def main():
