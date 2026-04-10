@@ -1,5 +1,9 @@
 from typing import Dict, Any
 
+
+def _strict_unit(value: float) -> float:
+    return round(min(0.999, max(0.001, value)), 3)
+
 # Seed catalog
 SEEDS = {
     "wheat_drought": {"drought_resist": 0.9, "pest_resist": 0.3, "yield": 0.7},
@@ -95,13 +99,13 @@ TASKS = {
 def compute_yield(seed_id: str, village: Dict) -> float:
     """Simulate crop yield based on seed + village conditions."""
     if seed_id not in SEEDS:
-        return 0.0
+        return 0.001
     seed = SEEDS[seed_id]
     drought_score = seed["drought_resist"] * (1 - village["drought_level"])
     pest_score    = seed["pest_resist"]    * (1 - village["pest_level"])
     base_yield    = seed["yield"] * village["soil_quality"]
     final_yield   = (drought_score + pest_score + base_yield) / 3.0
-    return round(min(final_yield, 1.0), 3)
+    return _strict_unit(final_yield)
 
 
 def crossbreed(seed_a: str, seed_b: str) -> Dict:
@@ -122,9 +126,7 @@ def grade_task(task_id: str, village_yields: Dict[str, float]) -> float:
     target = TASKS[task_id]["target_yield"]
     total  = len(village_yields)
     if total == 0:
-        return 0.001
+        return _strict_unit(0.0)
     passed = sum(1 for y in village_yields.values() if y >= target)
     raw_score = passed / total
-    # Hackathon validator requires strict bounds, not inclusive endpoints.
-    bounded = min(0.999, max(0.001, raw_score))
-    return round(bounded, 3)
+    return _strict_unit(raw_score)
