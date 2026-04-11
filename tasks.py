@@ -124,9 +124,17 @@ def crossbreed(seed_a: str, seed_b: str) -> Dict:
 def grade_task(task_id: str, village_yields: Dict[str, float]) -> float:
     """Score strictly inside (0, 1) based on villages hitting target yield."""
     target = TASKS[task_id]["target_yield"]
-    total  = len(village_yields)
+    villages = TASKS[task_id]["villages"]
+    total = len(villages)
     if total == 0:
         return _strict_unit(0.0)
-    passed = sum(1 for y in village_yields.values() if y >= target)
+
+    passed = 0
+    for village in villages:
+        village_id = village["village_id"]
+        yield_val = village_yields.get(village_id, 0.0)
+        if yield_val >= target:
+            passed += 1
+
     raw_score = passed / total
     return _strict_unit(raw_score)
