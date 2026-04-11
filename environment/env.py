@@ -5,6 +5,8 @@ from tasks import TASKS, SEEDS, compute_yield, crossbreed, grade_task
 
 
 class SeedBankEnv:
+    MAX_EPISODE_STEPS = 10
+
     def __init__(self, task_id: str = "easy"):
         self.task_id = task_id
         self.task = TASKS[task_id]
@@ -108,18 +110,18 @@ class SeedBankEnv:
             message = f"Unknown action: {action.action_type}"
 
         reward = self._bounded_step_reward(reward)
-        self.total_reward += reward
+        self.total_reward = self._bounded_score(self.total_reward + reward)
 
         # Check done
         all_served = all(not v.needs_seed for v in self.villages)
         max_seasons_reached = self.season >= self.task["max_seasons"]
-        if all_served or max_seasons_reached:
+        max_steps_reached = self.step_count >= self.MAX_EPISODE_STEPS
+        if all_served or max_seasons_reached or max_steps_reached:
             self.done = True
             # Final grading bonus
             final_score = grade_task(self.task_id, self.village_yields)
-            final_bonus = self._bounded_score(final_score * 0.3)
-            self.total_reward += final_bonus
-            self.total_reward = self._bounded_score(self.total_reward)
+            final_bonus = self._bounded_step_reward(final_score * 0.3)
+            self.total_reward = self._bounded_score(self.total_reward + final_bonus)
             message += f" | Final score: {final_score:.3f} (bonus: {final_bonus:.3f})"
 
         return self._get_observation(message), reward, self.done, {
