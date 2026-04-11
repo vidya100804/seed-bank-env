@@ -117,9 +117,10 @@ class SeedBankEnv:
             self.done = True
             # Final grading bonus
             final_score = grade_task(self.task_id, self.village_yields)
-            self.total_reward += final_score
+            final_bonus = self._bounded_score(final_score * 0.3)
+            self.total_reward += final_bonus
             self.total_reward = self._bounded_score(self.total_reward)
-            message += f" | Final score: {final_score}"
+            message += f" | Final score: {final_score:.3f} (bonus: {final_bonus:.3f})"
 
         return self._get_observation(message), reward, self.done, {
             "step": self.step_count,
