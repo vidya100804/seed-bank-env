@@ -24,3 +24,4 @@ endpoints:
   reset: POST /reset
   step:  POST /step
   state: GET  /state
+  grade: GET  /grade

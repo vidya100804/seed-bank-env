@@ -7,6 +7,7 @@ from fastapi.responses import JSONResponse
 import uvicorn
 from models import SeedBankAction
 from environment.env import SeedBankEnv
+from tasks import grade_task
 
 app = FastAPI(title="Seed Bank Curator - OpenEnv")
 
@@ -16,6 +17,10 @@ envs = {
     "medium": SeedBankEnv("medium"),
     "hard":   SeedBankEnv("hard"),
 }
+
+
+def _strict_unit(value: float) -> float:
+    return round(min(0.99, max(0.01, value)), 3)
 
 
 @app.get("/")
@@ -50,6 +55,14 @@ def state(task_id: str = "easy"):
     if task_id not in envs:
         return JSONResponse({"error": f"Unknown task: {task_id}"}, status_code=400)
     return envs[task_id].state().dict()
+
+
+@app.get("/grade")
+def grade(task_id: str = "easy"):
+    if task_id not in envs:
+        return JSONResponse({"error": f"Unknown task: {task_id}"}, status_code=400)
+    score = grade_task(task_id, envs[task_id].village_yields)
+    return {"task_id": task_id, "score": _strict_unit(score)}
 
 
 @app.get("/health")
