@@ -2,7 +2,7 @@ from typing import Dict, Any
 
 
 def _strict_unit(value: float) -> float:
-    return round(min(0.999, max(0.001, value)), 3)
+    return round(min(0.99, max(0.01, value)), 3)
 
 # Seed catalog
 SEEDS = {
@@ -99,7 +99,7 @@ TASKS = {
 def compute_yield(seed_id: str, village: Dict) -> float:
     """Simulate crop yield based on seed + village conditions."""
     if seed_id not in SEEDS:
-        return 0.001
+        return 0.01
     seed = SEEDS[seed_id]
     drought_score = seed["drought_resist"] * (1 - village["drought_level"])
     pest_score    = seed["pest_resist"]    * (1 - village["pest_level"])

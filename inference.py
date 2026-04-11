@@ -36,7 +36,7 @@ def require_env(name: str, value: Optional[str]) -> str:
 
 
 def bounded_score(value: float) -> float:
-    return round(min(0.999, max(0.001, value)), 3)
+    return round(min(0.99, max(0.01, value)), 3)
 
 
 def can_reach_env(base_url: str, timeout: int = 5) -> bool:

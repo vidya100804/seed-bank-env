@@ -155,4 +155,4 @@ class SeedBankEnv:
 
     @staticmethod
     def _bounded_score(value: float) -> float:
-        return round(min(0.999, max(0.001, value)), 3)
+        return round(min(0.99, max(0.01, value)), 3)
