@@ -28,5 +28,3 @@ py-modules = ["inference", "models", "tasks"]
 
 [tool.setuptools.packages.find]
 include = ["environment*", "server*"]
-
-
