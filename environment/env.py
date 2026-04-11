@@ -32,7 +32,7 @@ class SeedBankEnv:
 
     def step(self, action: SeedBankAction) -> Tuple[SeedBankObservation, float, bool, dict]:
         if self.done:
-            terminal_reward = self._bounded_score(0.0)
+            terminal_reward = self._bounded_step_reward(0.0)
             return self._get_observation("Episode done."), terminal_reward, True, {}
 
         reward = 0.0
@@ -107,7 +107,7 @@ class SeedBankEnv:
             reward = -0.1
             message = f"Unknown action: {action.action_type}"
 
-        reward = self._bounded_score(reward)
+        reward = self._bounded_step_reward(reward)
         self.total_reward += reward
 
         # Check done
@@ -157,3 +157,7 @@ class SeedBankEnv:
     @staticmethod
     def _bounded_score(value: float) -> float:
         return round(min(0.99, max(0.01, value)), 3)
+
+    @staticmethod
+    def _bounded_step_reward(value: float) -> float:
+        return round(min(0.09, max(0.01, value)), 3)
