@@ -122,19 +122,25 @@ def crossbreed(seed_a: str, seed_b: str) -> Dict:
 
 
 def grade_task(task_id: str, village_yields: Dict[str, float]) -> float:
-    """Score strictly inside (0, 1) based on villages hitting target yield."""
+    """Score strictly inside (0, 1) using proportional yield vs target.
+
+    Uses continuous scoring (yield / target) per village so the grader
+    returns meaningful differentiated values rather than a binary 0 or 1.
+    This guarantees scores are never exactly 0.0 or 1.0.
+    """
     target = TASKS[task_id]["target_yield"]
     villages = TASKS[task_id]["villages"]
     total = len(villages)
     if total == 0:
-        return _strict_unit(0.0)
+        return _strict_unit(0.5)
 
-    passed = 0
+    total_score = 0.0
     for village in villages:
         village_id = village["village_id"]
-        yield_val = village_yields.get(village_id, 0.0)
-        if yield_val >= target:
-            passed += 1
+        yield_val = village_yields.get(village_id, 0.1)  # base score if unserved
+        # Proportional credit: full score when yield meets or exceeds target
+        village_score = min(yield_val / target, 1.0) if target > 0 else yield_val
+        total_score += village_score
 
-    raw_score = passed / total
+    raw_score = total_score / total
     return _strict_unit(raw_score)
