@@ -36,7 +36,8 @@ def require_env(name: str, value: Optional[str]) -> str:
 
 
 def bounded_score(value: float) -> float:
-    return round(min(0.99, max(0.01, value)), 3)
+    """Clamp to strictly (0, 1) — never returns 0.0 or 1.0."""
+    return round(min(0.9, max(0.1, value)), 3)
 
 
 def can_reach_env(base_url: str, timeout: int = 5) -> bool:
@@ -236,7 +237,7 @@ What is your next action?"""
             obs = result["observation"]
             reward = result["reward"]
             done = result["done"]
-            rewards.append(reward)
+            rewards.append(bounded_score(reward))
 
             log_step(step, json.dumps(action), reward, done, error_msg)
 
@@ -245,7 +246,8 @@ What is your next action?"""
 
         state_url = f"{env_url}/state?{parse.urlencode({'task_id': task_id})}"
         final_state = http_json("GET", state_url)
-        total = float(final_state.get("total_reward", sum(rewards)))
+        fallback = sum(rewards) if rewards else 0.1
+        total = float(final_state.get("total_reward", fallback))
         total = bounded_score(total)
         success = total >= 0.5
 
