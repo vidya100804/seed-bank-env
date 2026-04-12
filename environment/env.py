@@ -4,6 +4,11 @@ from models import SeedBankAction, SeedBankObservation, SeedBankState, VillageIn
 from tasks import TASKS, SEEDS, compute_yield, crossbreed, grade_task
 
 
+def _clamp(value: float) -> float:
+    """Strictly clamp value to (0.01, 0.99) — never 0.0 or 1.0."""
+    return round(min(0.99, max(0.01, float(value))), 4)
+
+
 class SeedBankEnv:
     MAX_EPISODE_STEPS = 10
 
@@ -12,7 +17,7 @@ class SeedBankEnv:
         self.task = TASKS[task_id]
         self.season = 0
         self.step_count = 0
-        self.total_reward = 0.0
+        self.total_reward = 0.5   # start mid-range, never 0.0
         self.done = False
         self.villages = []
         self.available_seeds = {}
@@ -22,22 +27,19 @@ class SeedBankEnv:
     def reset(self) -> SeedBankObservation:
         self.season = 0
         self.step_count = 0
-        self.total_reward = 0.0
+        self.total_reward = 0.5
         self.done = False
         self.village_yields = {}
         self.custom_seeds = {}
-        self.villages = [
-            VillageInfo(**v) for v in self.task["villages"]
-        ]
+        self.villages = [VillageInfo(**v) for v in self.task["villages"]]
         self.available_seeds = copy.deepcopy(self.task["available_seeds"])
         return self._get_observation("Environment reset. Choose your action.")
 
     def step(self, action: SeedBankAction) -> Tuple[SeedBankObservation, float, bool, dict]:
         if self.done:
-            terminal_reward = self._bounded_step_reward(0.0)
-            return self._get_observation("Episode done."), terminal_reward, True, {}
+            return self._get_observation("Episode done."), _clamp(0.5), True, {}
 
-        reward = 0.0
+        reward = 0.5   # neutral starting reward
         message = ""
         self.step_count += 1
 
@@ -45,34 +47,25 @@ class SeedBankEnv:
         if action.action_type == "distribute":
             seed_id = action.seed_id
             village_id = action.village_id
-
             all_seeds = {**self.available_seeds, **{k: 1 for k in self.custom_seeds}}
             village = self._get_village(village_id)
 
-            if not seed_id or seed_id not in all_seeds or all_seeds.get(seed_id, 0) == 0:
-                reward = -0.1
-                message = f"Invalid seed {seed_id}."
+            if not seed_id or all_seeds.get(seed_id, 0) == 0:
+                reward = 0.2
+                message = f"Invalid or depleted seed {seed_id}."
             elif not village:
-                reward = -0.1
+                reward = 0.2
                 message = f"Invalid village {village_id}."
             else:
-                # Use the seed
                 if seed_id in self.available_seeds:
                     self.available_seeds[seed_id] -= 1
-
-                # Compute yield
-                seed_stats = self.custom_seeds.get(seed_id) or SEEDS.get(seed_id, {})
                 yield_val = compute_yield(seed_id, village.__dict__)
                 self.village_yields[village_id] = yield_val
-
-                # Update village
                 village.current_yield = yield_val
                 village.needs_seed = False
 
-                # Reward based on yield
-                reward = yield_val * 0.5
-                if yield_val >= self.task["target_yield"]:
-                    reward += 0.3
+                # Reward between 0.3 and 0.9 based on yield
+                reward = 0.3 + (yield_val * 0.6)
                 message = f"Distributed {seed_id} to {village_id}. Yield: {yield_val}"
 
         # --- CROSSBREED ---
@@ -82,51 +75,49 @@ class SeedBankEnv:
             all_seeds = {**self.available_seeds, **{k: 1 for k in self.custom_seeds}}
 
             if not seed_a or not seed_b:
-                reward = -0.1
+                reward = 0.2
                 message = "Provide seed_a and seed_b."
             elif seed_a not in all_seeds or seed_b not in all_seeds:
-                reward = -0.1
+                reward = 0.2
                 message = "One or both seeds not available."
             else:
                 hybrid = crossbreed(seed_a, seed_b)
                 new_id = f"hybrid_{seed_a[:3]}_{seed_b[:3]}"
                 self.custom_seeds[new_id] = hybrid
-                reward = 0.1
+                reward = 0.6
                 message = f"Created {new_id}: {hybrid}"
 
-        # --- REST (skip turn) ---
+        # --- REST ---
         elif action.action_type == "rest":
             self.season += 1
-            reward = -0.05
+            reward = 0.35
             message = f"Season advanced to {self.season}."
-
-            # Spread disease each season in hard task
             if self.task_id == "hard":
                 for v in self.villages:
-                    v.pest_level = min(v.pest_level + 0.1, 1.0)
+                    v.pest_level = min(v.pest_level + 0.1, 0.99)
 
         else:
-            reward = -0.1
+            reward = 0.2
             message = f"Unknown action: {action.action_type}"
 
-        reward = self._bounded_step_reward(reward)
-        self.total_reward = self._bounded_score(self.total_reward + reward)
+        # Clamp step reward strictly between 0 and 1
+        reward = _clamp(reward)
+        self.total_reward = _clamp(self.total_reward * 0.7 + reward * 0.3)
 
         # Check done
         all_served = all(not v.needs_seed for v in self.villages)
         max_seasons_reached = self.season >= self.task["max_seasons"]
         max_steps_reached = self.step_count >= self.MAX_EPISODE_STEPS
+
         if all_served or max_seasons_reached or max_steps_reached:
             self.done = True
-            # Final grading bonus
             final_score = grade_task(self.task_id, self.village_yields)
-            final_bonus = self._bounded_step_reward(final_score * 0.3)
-            self.total_reward = self._bounded_score(self.total_reward + final_bonus)
-            message += f" | Final score: {final_score:.3f} (bonus: {final_bonus:.3f})"
+            self.total_reward = _clamp(final_score)
+            message += f" | Final score: {final_score:.3f}"
 
         return self._get_observation(message), reward, self.done, {
             "step": self.step_count,
-            "total_reward": self._bounded_score(self.total_reward)
+            "total_reward": _clamp(self.total_reward)
         }
 
     def state(self) -> SeedBankState:
@@ -134,7 +125,7 @@ class SeedBankEnv:
             task_id=self.task_id,
             season=self.season,
             step_count=self.step_count,
-            total_reward=self._bounded_score(self.total_reward),
+            total_reward=_clamp(self.total_reward),
             done=self.done,
             villages=self.villages,
             available_seeds=self.available_seeds
@@ -155,11 +146,3 @@ class SeedBankEnv:
             task_id=self.task_id,
             message=message
         )
-
-    @staticmethod
-    def _bounded_score(value: float) -> float:
-        return round(min(0.99, max(0.01, value)), 3)
-
-    @staticmethod
-    def _bounded_step_reward(value: float) -> float:
-        return round(min(0.09, max(0.01, value)), 3)
